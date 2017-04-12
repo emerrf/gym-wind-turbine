@@ -1,0 +1,3 @@
+git+https://github.com/emerrf/CCBlade.git@packaging-refactored#egg=ccblade
+https://github.com/WISDEM/AirfoilPreppy/tarball/master#egg=airfoilprep.py
+-e .
