@@ -1,3 +1,7 @@
+## gym-wind-turbine
+# Render output
+gwt_render_output_*/
+
 # PyCharm
 .idea/
 gwt-devenv/

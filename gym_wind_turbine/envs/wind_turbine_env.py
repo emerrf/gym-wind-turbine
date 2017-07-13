@@ -4,7 +4,7 @@ from ccblade.ccblade import CCAirfoil, CCBlade
 
 import numpy as np
 from pkg_resources import resource_filename
-from os import path
+from os import path, makedirs
 
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
@@ -13,6 +13,7 @@ from matplotlib.animation import FuncAnimation
 import multiprocessing as mp
 import time
 import logging
+from datetime import datetime
 
 
 logger = logging.getLogger(__name__)
@@ -99,16 +100,34 @@ class WindTurbine(gym.Env):
 
         # Simulation initial values
         self.t = 0.0  # Time
+        self.t_max = env_settings['duration']
         self.i = 0
+        self.i_max = int(env_settings['duration']/env_settings['timestep'])
+        self.ep = 0
+
         self.gen_torq = np.array([0.606])
         self.pitch = np.array([0.0])
         self.omega = np.array([6.8464])
         self.next_omega = self.omega.copy()
         self.accum_reward = 0.0  # Accumulated reward
 
-        # Render variables
+        # Render
+        self.render_animation = False
+        self.run_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        # render_animation
         self.plotter_data = mp.Queue()
         self.is_plotter_active = False
+        # no render_animation
+        self.x_t = np.arange(
+            0, env_settings['duration'] + env_settings['timestep'],
+            env_settings['timestep'])
+        self.y_wind = np.full(self.x_t.shape, np.nan)
+        self.y_P = np.full(self.x_t.shape, np.nan)
+        self.y_T = np.full(self.x_t.shape, np.nan)
+        self.y_omega = np.full(self.x_t.shape, np.nan)
+        self.y_gen_torq = np.full(self.x_t.shape, np.nan)
+        self.y_pitch = np.full(self.x_t.shape, np.nan)
+        self.y_reward = np.full(self.x_t.shape, np.nan)
 
         # Real Control variables
         self.rc_wind = np.array(
@@ -125,6 +144,9 @@ class WindTurbine(gym.Env):
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 3.823, 6.602, 8.668, 10.45, 12.055,
              13.536, 14.92, 16.226, 17.473, 18.699, 19.941, 21.177, 22.347,
              23.469])
+
+    def activate_render_animation(self):
+        self.render_animation = True
 
     def _initialise_nrel_5mw(self):
         """
@@ -229,19 +251,30 @@ class WindTurbine(gym.Env):
         done = not (self.action_space.contains(action)
                     and self.observation_space.contains(observation))
 
-        # Send data to plotter
-        if self.is_plotter_active:
-            plotter_data_point = (done, {
-                't': self.t,
-                'wind': observation[0][0],
-                'P': observation[1][0],
-                'T': observation[2][0],
-                'omega': observation[3][0],
-                'gen_torq': observation[4][0],
-                'pitch': observation[5][0],
-                'reward': reward[0]  # accum_reward?
-            })
-            self.plotter_data.put(plotter_data_point)
+        # Render data points
+        if self.render_animation:
+            # Send data to plotter
+            if self.is_plotter_active:
+                plotter_data_point = (done, {
+                    't': self.t,
+                    'wind': observation[0][0],
+                    'P': observation[1][0],
+                    'T': observation[2][0],
+                    'omega': observation[3][0],
+                    'gen_torq': observation[4][0],
+                    'pitch': observation[5][0],
+                    'reward': reward[0]
+                })
+                self.plotter_data.put(plotter_data_point)
+        else:
+            self.x_t[self.i] = self.t
+            self.y_wind[self.i] = observation[0][0]
+            self.y_P[self.i] = observation[1][0]
+            self.y_T[self.i] = observation[2][0]
+            self.y_omega[self.i] = observation[3][0]
+            self.y_gen_torq[self.i] = observation[4][0]
+            self.y_pitch[self.i] = observation[5][0]
+            self.y_reward[self.i] = reward[0]
 
         # Prepare next iteration
         # Update Omega
@@ -249,6 +282,7 @@ class WindTurbine(gym.Env):
                                             self.nrel_5mw_drivetrain_param)
         # Update time
         self.t += self.dt
+        self.i += 1
 
         return observation, reward, done, {}
 
@@ -256,20 +290,41 @@ class WindTurbine(gym.Env):
         self.anamometer.reset()
         # Simulation initial values
         self.t = 0.0  # Time
+        self.i = 0
+        self.ep += 1
         self.gen_torq = np.array([0.606])
         self.pitch = np.array([0.0])
         self.omega = np.array([6.8464])
         self.next_omega = self.omega
         self.accum_reward = 0.0  # Accumulated reward
 
+        if not self.render_animation:
+            self.y_wind = np.full(self.x_t.shape, np.nan)
+            self.y_P = np.full(self.x_t.shape, np.nan)
+            self.y_T = np.full(self.x_t.shape, np.nan)
+            self.y_omega = np.full(self.x_t.shape, np.nan)
+            self.y_gen_torq = np.full(self.x_t.shape, np.nan)
+            self.y_pitch = np.full(self.x_t.shape, np.nan)
+            self.y_reward = np.full(self.x_t.shape, np.nan)
+
         return self._step(self.neutral_action)
 
     def _render(self, mode='human', close=False):
 
-        def plotter(q_plotter_data):
+        def plot_and_save():
+            rout_dir = 'gwt_render_output_{}'.format(self.run_timestamp)
+            rout_filename = 'ep_{}_{}.png'.format(
+                "%05d" % self.ep, '%0.0f' % (time.time() * 100))
+            rout_path = path.join(rout_dir, rout_filename)
 
-            initial_xmax = 60.0
+            # Create render output directory
+            try:
+                makedirs(rout_dir)
+            except OSError:
+                if not path.isdir(rout_dir):
+                    raise
 
+            # Plot
             fig, (ax_wind,
                   ax_P,
                   ax_T,
@@ -280,54 +335,45 @@ class WindTurbine(gym.Env):
 
             fig.suptitle('gym-wind-turbine')
 
-            x_t = []
-            y_wind = []
-            y_P = []
-            y_T = []
-            y_omega = []
-            y_gen_torq = []
-            y_pitch = []
-            # y_reward = []
-
             ax_wind.set_ylabel('Wind [m/s]')
-            line_wind = Line2D([], [], color='black')
+            line_wind = Line2D(self.x_t, self.y_wind, color='black')
             ax_wind.add_line(line_wind)
-            ax_wind.set_xlim(0, initial_xmax)
+            ax_wind.set_xlim(0, self.t_max)
             ax_wind.set_ylim(0, 25)
             ax_wind.grid(linestyle='--', linewidth=0.5)
 
             ax_P.set_ylabel('Power [kW]')
-            line_P = Line2D([], [], color='black')
+            line_P = Line2D(self.x_t, self.y_P, color='black')
             ax_P.add_line(line_P)
-            ax_P.set_xlim(0, initial_xmax)
+            ax_P.set_xlim(0, self.t_max)
             ax_P.set_ylim(0, 7000)
             ax_P.grid(linestyle='--', linewidth=0.5)
 
             ax_T.set_ylabel('Thrust [kN]')
-            line_T = Line2D([], [], color='black')
+            line_T = Line2D(self.x_t, self.y_T, color='black')
             ax_T.add_line(line_T)
-            ax_T.set_xlim(0, initial_xmax)
+            ax_T.set_xlim(0, self.t_max)
             ax_T.set_ylim(0, 1000)
             ax_T.grid(linestyle='--', linewidth=0.5)
 
             ax_omega.set_ylabel('Rotor speed [rpm]')
-            line_omega = Line2D([], [], color='black')
+            line_omega = Line2D(self.x_t, self.y_omega, color='black')
             ax_omega.add_line(line_omega)
-            ax_omega.set_xlim(0, initial_xmax)
+            ax_omega.set_xlim(0, self.t_max)
             ax_omega.set_ylim(0, 15)
             ax_omega.grid(linestyle='--', linewidth=0.5)
 
             ax_gen_torq.set_ylabel('Gen. Torque [kNm]')
-            line_gen_torq = Line2D([], [], color='blue')
+            line_gen_torq = Line2D(self.x_t, self.y_gen_torq, color='blue')
             ax_gen_torq.add_line(line_gen_torq)
-            ax_gen_torq.set_xlim(0, initial_xmax)
+            ax_gen_torq.set_xlim(0, self.t_max)
             ax_gen_torq.set_ylim(0.606, 47.403)
             ax_gen_torq.grid(linestyle='--', linewidth=0.5)
 
             ax_pitch.set_ylabel('Coll. pitch [deg]')
-            line_pitch = Line2D([], [], color='blue')
+            line_pitch = Line2D(self.x_t, self.y_pitch, color='blue')
             ax_pitch.add_line(line_pitch)
-            ax_pitch.set_xlim(0, initial_xmax)
+            ax_pitch.set_xlim(0, self.t_max)
             ax_pitch.set_ylim(0, 90)
             ax_pitch.grid(linestyle='--', linewidth=0.5)
             ax_pitch.set_xlabel('Time [s]')
@@ -339,78 +385,31 @@ class WindTurbine(gym.Env):
             # ax_reward.set_ylim(-200, 5600)
             # ax_reward.grid(linestyle='--', linewidth=0.5)
 
-            def update_line(i):
-                done, data_point = q_plotter_data.get()
-                # logger.debug("Plot data point: {}".format(obj))
-
-                x_t.append(data_point['t'])
-                y_wind.append(data_point['wind'])
-                y_P.append(data_point['P'])
-                y_T.append(data_point['T'])
-                y_omega.append(data_point['omega'])
-                y_gen_torq.append(data_point['gen_torq'])
-                y_pitch.append(data_point['pitch'])
-                # y_reward.append(data_point['reward'])
-
-                xmin, xmax = ax_wind.get_xlim()
-                xlim_mult = 2.0
-                if data_point['t'] >= xmax:
-                    ax_wind.set_xlim(xmin, xmax * xlim_mult)
-                    ax_wind.figure.canvas.draw()
-                    ax_P.set_xlim(xmin, xmax * xlim_mult)
-                    ax_P.figure.canvas.draw()
-                    ax_T.set_xlim(xmin, xmax * xlim_mult)
-                    ax_T.figure.canvas.draw()
-                    ax_omega.set_xlim(xmin, xmax * xlim_mult)
-                    ax_omega.figure.canvas.draw()
-                    ax_gen_torq.set_xlim(xmin, xmax * xlim_mult)
-                    ax_gen_torq.figure.canvas.draw()
-                    ax_pitch.set_xlim(xmin, xmax * xlim_mult)
-                    ax_pitch.figure.canvas.draw()
-                    # ax_reward.set_xlim(xmin, xmax * xlim_mult)
-                    # ax_reward.figure.canvas.draw()
-
-                if done:
-                    del x_t[:]
-                    del y_wind[:]
-                    del y_P[:]
-                    del y_T[:]
-                    del y_omega[:]
-                    del y_gen_torq[:]
-                    del y_pitch[:]
-                    # del y_reward[:]
-
-                else:
-                    line_wind.set_data(x_t, y_wind)
-                    line_P.set_data(x_t, y_P)
-                    line_T.set_data(x_t, y_T)
-                    line_omega.set_data(x_t, y_omega)
-                    line_gen_torq.set_data(x_t, y_gen_torq)
-                    line_pitch.set_data(x_t, y_pitch)
-                    # line_reward.set_data(x_t, y_reward)
-
-                return [line_wind, line_P, line_T, line_omega, line_gen_torq,
-                        line_pitch]  # ,line_reward]
-
-            ani = FuncAnimation(fig, update_line, interval=25,
-                                blit=True, save_count=25*20*120)
-            # ani.save('ani3.gif', writer='imagemagick', fps=20)
-            # ani.save(filename='ani3.mp4', fps=20)
-            plt.show()
+            logger.info("Saving figure: {}".format(rout_path))
+            plt.savefig(rout_path, dpi=72)
+            # plt.show()
 
         if mode == 'human':
-            if not close and not self.is_plotter_active:
-                self.is_plotter_active = True
-                self.p = mp.Process(target=plotter, args=(self.plotter_data, ))
-                self.p.start()
+            if self.render_animation:
+                if not close and not self.is_plotter_active:
+                    self.is_plotter_active = True
+                    self.p = mp.Process(target=plotter,
+                                        args=(self.plotter_data, ))
+                    self.p.start()
+                else:
+                    if self.is_plotter_active:
+                        logger.info("Waiting for plotter...")
+                        while not self.plotter_data.empty():
+                            # logger.info("sleeping")
+                            time.sleep(3)
+                        # self.p.join()
+                        self.p.terminate()
+                        self.is_plotter_active = False
             else:
-                if self.is_plotter_active:
-                    logger.info("Waiting for plotter...")
-                    while not self.plotter_data.empty():
-                        time.sleep(3)
-                    # self.p.join()
-                    self.p.terminate()
-                    self.is_plotter_active = False
+                if close:
+                    return None
+                else:
+                    plot_and_save()
 
         elif mode == 'rgb_array':
             # Matplotlib to RGB array (gif)
@@ -434,8 +433,134 @@ class WindTurbine(gym.Env):
         return real_control_action
 
 
+def plotter(q_plotter_data):
 
+    initial_xmax = 60.0
 
+    fig, (ax_wind,
+          ax_P,
+          ax_T,
+          ax_omega,
+          ax_gen_torq,
+          ax_pitch) = plt.subplots(6, figsize=(8, 12), sharex='all',
+                                   tight_layout=True)
 
+    fig.suptitle('gym-wind-turbine')
 
+    x_t = []
+    y_wind = []
+    y_P = []
+    y_T = []
+    y_omega = []
+    y_gen_torq = []
+    y_pitch = []
+    # y_reward = []
 
+    ax_wind.set_ylabel('Wind [m/s]')
+    line_wind = Line2D([], [], color='black')
+    ax_wind.add_line(line_wind)
+    ax_wind.set_xlim(0, initial_xmax)
+    ax_wind.set_ylim(0, 25)
+    ax_wind.grid(linestyle='--', linewidth=0.5)
+
+    ax_P.set_ylabel('Power [kW]')
+    line_P = Line2D([], [], color='black')
+    ax_P.add_line(line_P)
+    ax_P.set_xlim(0, initial_xmax)
+    ax_P.set_ylim(0, 7000)
+    ax_P.grid(linestyle='--', linewidth=0.5)
+
+    ax_T.set_ylabel('Thrust [kN]')
+    line_T = Line2D([], [], color='black')
+    ax_T.add_line(line_T)
+    ax_T.set_xlim(0, initial_xmax)
+    ax_T.set_ylim(0, 1000)
+    ax_T.grid(linestyle='--', linewidth=0.5)
+
+    ax_omega.set_ylabel('Rotor speed [rpm]')
+    line_omega = Line2D([], [], color='black')
+    ax_omega.add_line(line_omega)
+    ax_omega.set_xlim(0, initial_xmax)
+    ax_omega.set_ylim(0, 15)
+    ax_omega.grid(linestyle='--', linewidth=0.5)
+
+    ax_gen_torq.set_ylabel('Gen. Torque [kNm]')
+    line_gen_torq = Line2D([], [], color='blue')
+    ax_gen_torq.add_line(line_gen_torq)
+    ax_gen_torq.set_xlim(0, initial_xmax)
+    ax_gen_torq.set_ylim(0.606, 47.403)
+    ax_gen_torq.grid(linestyle='--', linewidth=0.5)
+
+    ax_pitch.set_ylabel('Coll. pitch [deg]')
+    line_pitch = Line2D([], [], color='blue')
+    ax_pitch.add_line(line_pitch)
+    ax_pitch.set_xlim(0, initial_xmax)
+    ax_pitch.set_ylim(0, 90)
+    ax_pitch.grid(linestyle='--', linewidth=0.5)
+    ax_pitch.set_xlabel('Time [s]')
+
+    # ax_reward.set_ylabel('Total Reward [units]')
+    # line_reward = Line2D([], [], color='blue')  # 00529F, red: #A2214B
+    # ax_reward.add_line(line_reward)
+    # ax_reward.set_xlim(0, initial_xmax)
+    # ax_reward.set_ylim(-200, 5600)
+    # ax_reward.grid(linestyle='--', linewidth=0.5)
+
+    def update_line(i):
+        done, data_point = q_plotter_data.get()
+        # logger.debug("Plot data point: {}".format(obj))
+
+        x_t.append(data_point['t'])
+        y_wind.append(data_point['wind'])
+        y_P.append(data_point['P'])
+        y_T.append(data_point['T'])
+        y_omega.append(data_point['omega'])
+        y_gen_torq.append(data_point['gen_torq'])
+        y_pitch.append(data_point['pitch'])
+        # y_reward.append(data_point['reward'])
+
+        xmin, xmax = ax_wind.get_xlim()
+        xlim_mult = 2.0
+        if data_point['t'] >= xmax:
+            ax_wind.set_xlim(xmin, xmax * xlim_mult)
+            ax_wind.figure.canvas.draw()
+            ax_P.set_xlim(xmin, xmax * xlim_mult)
+            ax_P.figure.canvas.draw()
+            ax_T.set_xlim(xmin, xmax * xlim_mult)
+            ax_T.figure.canvas.draw()
+            ax_omega.set_xlim(xmin, xmax * xlim_mult)
+            ax_omega.figure.canvas.draw()
+            ax_gen_torq.set_xlim(xmin, xmax * xlim_mult)
+            ax_gen_torq.figure.canvas.draw()
+            ax_pitch.set_xlim(xmin, xmax * xlim_mult)
+            ax_pitch.figure.canvas.draw()
+            # ax_reward.set_xlim(xmin, xmax * xlim_mult)
+            # ax_reward.figure.canvas.draw()
+
+        if done:
+            del x_t[:]
+            del y_wind[:]
+            del y_P[:]
+            del y_T[:]
+            del y_omega[:]
+            del y_gen_torq[:]
+            del y_pitch[:]
+            # del y_reward[:]
+
+        else:
+            line_wind.set_data(x_t, y_wind)
+            line_P.set_data(x_t, y_P)
+            line_T.set_data(x_t, y_T)
+            line_omega.set_data(x_t, y_omega)
+            line_gen_torq.set_data(x_t, y_gen_torq)
+            line_pitch.set_data(x_t, y_pitch)
+            # line_reward.set_data(x_t, y_reward)
+
+        return [line_wind, line_P, line_T, line_omega, line_gen_torq,
+                line_pitch]  # ,line_reward]
+
+    ani = FuncAnimation(fig, update_line, interval=25,
+                        blit=True, save_count=25*20*120)
+    # ani.save('ani3.gif', writer='imagemagick', fps=20)
+    # ani.save(filename='ani3.mp4', fps=20)
+    plt.show()

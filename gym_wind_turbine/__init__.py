@@ -8,6 +8,7 @@ register(
     kwargs={
         'env_settings': {
             'timestep': 1.0/20.0,
+            'duration': 60.0,
             'wind': {
                 'mode': 'constant',
                 'speed': 8.0,
@@ -23,6 +24,7 @@ register(
     kwargs={
         'env_settings': {
             'timestep': 1.0/20.0,
+            'duration': 120.0,
             'wind': {
                 'mode': 'stepwise',
                 'speed_range': [4.0, 24.0],

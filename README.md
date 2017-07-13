@@ -27,7 +27,10 @@ For those unfamiliar with OpenAI Gym environments, there is excellent [documenta
 
 ## Getting started
 ### Installation
-The package has been coded and tested on a Linux environment. It requires Python 2.7 and the Fortran compiler for the CCBlade routines.
+The package has been coded and tested on Linux and Windows environments.
+
+#### Ubuntu
+It requires Python 2.7 and the Fortran compiler for the CCBlade routines.
 ```
 $ virtualenv gwt-devenv
 (gwt-devenv)$ pip install numpy==1.12.1
@@ -38,10 +41,27 @@ Numpy is installed first as it contains the distutils that are able to compile F
 (gwt-devenv)$ ccblade
 (gwt-devenv)$ gwt-run-neutral
 ```
-### Other platforms
-Windows users will need to run the code inside [Cygwin](https://www.cygwin.com/) as the Python interpreter has to be compiled with the same gcc version that compiles the Fortran code, otherwise you will have Segmentation Fault errors at runtime.
-The code will probably work on a macOS systems too, but as I don't want to encourage its usage either, I'll suggest you to use the Docker image instead. The only inconvenience here is displaying the charts.  
-Dockerfile is provided but rendering won't work unless you do some tricks attaching the X server port to it.
+
+#### Windows 10
+It requires Anaconda 2 and Python 
+- [Anaconda2 4.4.0](https://repo.continuum.io/archive/Anaconda2-4.4.0-Windows-x86_64.exe)
+- [Microsoft Visual C++ Compiler for Python 2.7](http://aka.ms/vcpython27)
+Once both are installed, proceed with an Anaconda Prompt
+```prompt
+(Anaconda2)> conda create --name gwt-devenv python=2.7 scipy=0.18.1 zope.interface=4.4.2 m2w64-gcc-fortran=5.3.0
+(Anaconda2)> activate gwt-devenv
+(gwt-devenv)> pip install -r requirements.txt
+```
+Test your installation with:
+```prompt
+(gwt-devenv)> ccblade
+(gwt-devenv)> gwt-run-neutral
+```
+
+#### Other platforms
+The code will probably work on a macOS systems too, I suggest to follow a similar approach explain in Windows section which uses Anaconda.
+A Dockerfile is also provided. The rendering should be fine as saving the plots into files is now set by default. Note that the animated rendering will not work out of the box. It will probably require linking the docker instance into a X server.
+Here are the instructions:
 ```bash
 docker build -t gym-wind-turbine:1.0.0 .
 docker run gym-wind-turbine:1.0.0
@@ -71,19 +91,18 @@ def run_neutral_actions():
     print wt.action_space.sample()
 
     print "Episode using neutral action"
-    wt.render()
     observation, _, done, _ = wt.reset()
     action = wt.env.neutral_action
     while not done:
         observation, reward, done, info = wt.step(action)
 
-    wt.render(close=True)
+    wt.render()
 ```
 The code is self explanatory but I'll quickly go through for the newcomers. The `WindTurbine-v0` environment is instantiated in `wt` variable. This is the simplest one and it simulates constant wind at 8 m/s. 
-```python
+```bash
 >>> wt = gym.make('WindTurbine-v0')
-[2017-04-14 09:05:48,422] Making new env: WindTurbine-v0
-[2017-04-14 09:05:48,776] {'timestep': 0.05, 'wind': {'speed': 8.0, 'mode': 'constant'}}
+[2017-07-13 08:34:55,421] Making new env: WindTurbine-v0
+[2017-07-13 08:34:55,421] {'duration': 60.0, 'timestep': 0.05, 'wind': {'speed': 8.0, 'mode': 'constant'}}
 ```
 
 Before starting the simulation, let's explore the metrics we will be working with. Each observation of the environment is composed by 6 measurements which are detailed next:
@@ -106,7 +125,7 @@ Index | Name and units | Min | Max
 
 The specifications of the wind turbine defines the maximum change rate per second. However, as the simulation is computed every 1/20 seconds, the maximum range allowed at the decision time is also 1/20th of the maximum value (dt = 0.05). 
 
-The statement `wt.render()` initialise the window which plots the metrics at real time. The following code block runs the simulation:
+The following code block runs the simulation:
 ```python
     observation, _, done, _ = wt.reset()
     action = wt.env.neutral_action
@@ -123,8 +142,13 @@ The control variables (generator torque and coll. pitch lines in blue) do not ch
 
 The algorithm can use the `reward` variable as a measurement of how good the previous decision or taken action was. The default reward function is a linear combination of the Power (80%) and the Thrust (20%) generated with a range of [-200, 5600].
   
-If no limits are reached, the environment will terminate after 60 seconds of simulated time 
- (2400 time steps). At the end, the plot window is closed using the stetament `wt.render(close=True)`.
+The statement `wt.render()` is set to generate and save a simulation plot containing the metrics values recorded during the episode. The output shows the relative path to the file. 
+```bash
+[2017-07-13 09:00:27,059] Saving figure: gwt_render_output_20170713090013\ep_00001_149992922673.png
+```
+There is an animation mode that can be enabled using `wt.env.activate_render_animation()` which will plot the the metrics at real time. Checkout `wind_turbine_run.run_neutral_actions_with_animation` function.
+
+If no limits are reached, the environment will terminate after 60 seconds of simulated time (2400 time steps).
  
  #### Case: real control
  ![Image of Case: Neutral action](README_stepwise.png)
