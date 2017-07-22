@@ -27,10 +27,10 @@ For those unfamiliar with OpenAI Gym environments, there is excellent [documenta
 
 ## Getting started
 ### Installation
-The package has been coded and tested on Linux and Windows environments.
+The package has been coded and tested on GNU/Linux and Windows environments with Python 2.7 and 3.6.
 
 #### Ubuntu
-It requires Python 2.7 and the Fortran compiler for the CCBlade routines.
+It requires Python 2.7 or 3.6 and the Fortran compiler for the CCBlade routines.
 ```
 $ virtualenv gwt-devenv
 (gwt-devenv)$ pip install numpy==1.12.1
@@ -43,13 +43,18 @@ Numpy is installed first as it contains the distutils that are able to compile F
 ```
 
 #### Windows 10
-It requires Anaconda 2 and Python 
+##### Python 2.7
 - [Anaconda2 4.4.0](https://repo.continuum.io/archive/Anaconda2-4.4.0-Windows-x86_64.exe)
 - [Microsoft Visual C++ Compiler for Python 2.7](http://aka.ms/vcpython27)
+
+##### Python 3.6
+- [Anaconda3 4.4.0](https://repo.continuum.io/archive/Anaconda3-4.4.0-Windows-x86_64.exe)
+- [Microsoft Visual C++ 2015 Build Tools](http://landinghub.visualstudio.com/visual-cpp-build-tools)
+
 Once both are installed, proceed with an Anaconda Prompt
 ```prompt
-(Anaconda2)> conda create --name gwt-devenv python=2.7 scipy=0.18.1 zope.interface=4.4.2 m2w64-gcc-fortran=5.3.0
-(Anaconda2)> activate gwt-devenv
+(Anaconda)> conda create --name gwt-devenv python=X.Y scipy=0.18.1 zope.interface=4.4.2 m2w64-gcc-fortran=5.3.0
+(Anaconda)> activate gwt-devenv
 (gwt-devenv)> pip install -r requirements.txt
 ```
 Test your installation with:
@@ -86,11 +91,11 @@ def run_neutral_actions():
     wt = gym.make('WindTurbine-v0')
 
     # Discovering action and observation spaces
-    print wt.action_space
-    print wt.observation_space
-    print wt.action_space.sample()
+    print(wt.action_space)
+    print(wt.observation_space)
+    print(wt.action_space.sample())
 
-    print "Episode using neutral action"
+    print("Episode using neutral action")
     observation, _, done, _ = wt.reset()
     action = wt.env.neutral_action
     while not done:
