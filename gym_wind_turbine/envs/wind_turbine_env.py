@@ -46,14 +46,14 @@ class WindGenerator:
                 **self.param))
 
     def _read_constant(self, t):
-        return np.array([self.param['speed']])
+        return self.param['speed']
 
     def _read_stepwise(self, t):
         if t > 0.0 and np.round(t, 2) % self.step_length == 0.0:
             diff_wind = np.clip(self.target_wind - self.current_wind,
                                 -1.0, 1.0)
             self.current_wind += diff_wind
-        return np.array([self.current_wind])
+        return self.current_wind
 
     def reset(self):
         self.t = 0.0
@@ -81,22 +81,27 @@ class WindTurbine(gym.Env):
         self.anamometer = WindGenerator(env_settings)
 
         # Prepare Gym environment
-        self.observation_space = spaces.Tuple((
-            spaces.Box(low=3, high=25, shape=1),    # wind [m/s]
-            spaces.Box(low=0, high=7000, shape=1),  # power [kW]
-            spaces.Box(low=0, high=1000, shape=1),  # thrust [kN]
-            spaces.Box(low=0, high=15, shape=1),    # rotor speed [rpm]
-            spaces.Box(low=0.606, high=47.403,      # generator torque [kNm]
-                       shape=1),
-            spaces.Box(low=0, high=90, shape=1)     # collective pitch [deg]
-        ))
+        obs_space_min_max_limits = np.array([
+            [3, 25],          # wind [m/s]
+            [0, 7000],        # power [kW]
+            [0, 1000],        # thrust [kN]
+            [0, 15],          # rotor speed [rpm]
+            [0.606, 47.403],  # generator torque [kNm]
+            [0, 90]           # collective pitch [deg]
+        ])
+        self.observation_space = spaces.Box(
+            low=obs_space_min_max_limits[:, 0],
+            high=obs_space_min_max_limits[:, 1])
 
-        self.action_space = spaces.Tuple((
-            spaces.Box(low=-15.0 * self.dt, high=15.0 * self.dt,
-                       shape=1),   # gen. torque rate [kNm/s]
-            spaces.Box(low=-8.0 * self.dt, high=8.0 * self.dt,
-                       shape=1)))  # pitch rate [deg/s]
-        self.neutral_action = (np.array([0.0]), np.array([0.0]))
+        act_space_min_max_limits = np.array([
+            [-15.0, 15.0],  # gen. torque rate [kNm/s]
+            [-8.0, 8.0]     # pitch rate [deg/s]
+        ]) * self.dt
+        self.action_space = spaces.Box(
+            low=act_space_min_max_limits[:, 0],
+            high=act_space_min_max_limits[:, 1])
+
+        self.neutral_action = np.array([0.0, 0.0])
 
         # Simulation initial values
         self.t = 0.0  # Time
@@ -105,14 +110,15 @@ class WindTurbine(gym.Env):
         self.i_max = int(env_settings['duration']/env_settings['timestep'])
         self.ep = 0
 
-        self.gen_torq = np.array([0.606])
-        self.pitch = np.array([0.0])
-        self.omega = np.array([6.8464])
-        self.next_omega = self.omega.copy()
+        self.gen_torq = 0.606
+        self.pitch = 0.0
+        self.omega = 6.8464
+        self.next_omega = self.omega
         self.accum_reward = 0.0  # Accumulated reward
 
         # Render
         self.render_animation = False
+        plt.ioff()
         self.run_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         # render_animation
         self.plotter_data = mp.Queue()
@@ -146,6 +152,7 @@ class WindTurbine(gym.Env):
              23.469])
 
     def activate_render_animation(self):
+        plt.ion()
         self.render_animation = True
 
     def _initialise_nrel_5mw(self):
@@ -235,13 +242,11 @@ class WindTurbine(gym.Env):
             self.pitch += action[1]
 
         # Simulate
-        self.omega = self.next_omega.copy()
+        self.omega = self.next_omega
         Uinf = self.anamometer.read(self.t)
-        P, T, Q = self.rotor.evaluate(Uinf, self.omega, self.pitch)
-        # observation = (P/1e3, T/1e3, Uinf, self.omega, self.pitch,
-        #                self.gen_torq)
-        observation = (Uinf, P / 1e3, T / 1e3, self.omega, self.gen_torq,
-                       self.pitch)
+        P, T, Q = self.rotor.evaluate([Uinf], [self.omega], [self.pitch])
+        observation = np.array([Uinf, P[0] / 1e3, T[0] / 1e3, self.omega,
+                                self.gen_torq, self.pitch])
 
         # Compute reward
         reward = self._score(observation)
@@ -257,24 +262,24 @@ class WindTurbine(gym.Env):
             if self.is_plotter_active:
                 plotter_data_point = (done, {
                     't': self.t,
-                    'wind': observation[0][0],
-                    'P': observation[1][0],
-                    'T': observation[2][0],
-                    'omega': observation[3][0],
-                    'gen_torq': observation[4][0],
-                    'pitch': observation[5][0],
-                    'reward': reward[0]
+                    'wind': observation[0],
+                    'P': observation[1],
+                    'T': observation[2],
+                    'omega': observation[3],
+                    'gen_torq': observation[4],
+                    'pitch': observation[5],
+                    'reward': reward
                 })
                 self.plotter_data.put(plotter_data_point)
         else:
             self.x_t[self.i] = self.t
-            self.y_wind[self.i] = observation[0][0]
-            self.y_P[self.i] = observation[1][0]
-            self.y_T[self.i] = observation[2][0]
-            self.y_omega[self.i] = observation[3][0]
-            self.y_gen_torq[self.i] = observation[4][0]
-            self.y_pitch[self.i] = observation[5][0]
-            self.y_reward[self.i] = reward[0]
+            self.y_wind[self.i] = observation[0]
+            self.y_P[self.i] = observation[1]
+            self.y_T[self.i] = observation[2]
+            self.y_omega[self.i] = observation[3]
+            self.y_gen_torq[self.i] = observation[4]
+            self.y_pitch[self.i] = observation[5]
+            self.y_reward[self.i] = reward
 
         # Prepare next iteration
         # Update Omega
@@ -292,9 +297,9 @@ class WindTurbine(gym.Env):
         self.t = 0.0  # Time
         self.i = 0
         self.ep += 1
-        self.gen_torq = np.array([0.606])
-        self.pitch = np.array([0.0])
-        self.omega = np.array([6.8464])
+        self.gen_torq = 0.606
+        self.pitch = 0.0
+        self.omega = 6.8464
         self.next_omega = self.omega
         self.accum_reward = 0.0  # Accumulated reward
 
@@ -307,7 +312,8 @@ class WindTurbine(gym.Env):
             self.y_pitch = np.full(self.x_t.shape, np.nan)
             self.y_reward = np.full(self.x_t.shape, np.nan)
 
-        return self._step(self.neutral_action)
+        # return observation only
+        return self._step(self.neutral_action)[0]
 
     def _render(self, mode='human', close=False):
 
@@ -387,6 +393,7 @@ class WindTurbine(gym.Env):
 
             logger.info("Saving figure: {}".format(rout_path))
             plt.savefig(rout_path, dpi=72)
+            plt.close(fig)
             # plt.show()
 
         if mode == 'human':
@@ -425,11 +432,12 @@ class WindTurbine(gym.Env):
         opt_gen_torq = np.interp(obs_wind, self.rc_wind, self.rc_gen_torq)
         opt_pitch = np.interp(obs_wind, self.rc_wind, self.rc_pitch)
 
-        act_gen_torq, act_pitch = self.action_space.spaces
-        real_control_action = (np.clip(opt_gen_torq - obs_gen_torq,
-                                       act_gen_torq.low, act_gen_torq.high),
-                               np.clip(opt_pitch - obs_pitch,
-                                       act_pitch.low, act_pitch.high))
+        act_gen_torq_low, act_pitch_low = self.action_space.low
+        act_gen_torq_high, act_pitch_high = self.action_space.high
+        real_control_action = np.array([
+            np.clip(opt_gen_torq - obs_gen_torq, act_gen_torq_low,
+                    act_gen_torq_high),
+            np.clip(opt_pitch - obs_pitch, act_pitch_low, act_pitch_high)])
         return real_control_action
 
 

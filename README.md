@@ -53,7 +53,7 @@ Numpy is installed first as it contains the distutils that are able to compile F
 
 Once both are installed, proceed with an Anaconda Prompt
 ```prompt
-(Anaconda)> conda create --name gwt-devenv python=X.Y scipy=0.18.1 zope.interface=4.4.2 m2w64-gcc-fortran=5.3.0
+(Anaconda)> conda create --name gwt-devenv python=3.6.2 scipy=0.18.1 zope.interface=4.4.2 m2w64-gcc-fortran=5.3.0
 (Anaconda)> activate gwt-devenv
 (gwt-devenv)> pip install -r requirements.txt
 ```

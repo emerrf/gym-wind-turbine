@@ -14,7 +14,8 @@ def run_neutral_actions():
     print(wt.action_space.sample())
 
     print("Episode using neutral action")
-    observation, _, done, _ = wt.reset()
+    done = False
+    wt.reset()
     action = wt.env.neutral_action
     while not done:
         observation, reward, done, info = wt.step(action)
@@ -29,7 +30,8 @@ def run_random_actions():
     print("100 Episodes with random actions")
     for i_episode in range(100):
         print("Episode {}".format(i_episode))
-        observation, _, done, _ = wt.reset()
+        done = False
+        wt.reset()
         while not done:
             action = wt.env.action_space.sample()
             observation, reward, done, info = wt.step(action)
@@ -42,7 +44,8 @@ def run_real_control_actions():
     wt = gym.make('WindTurbineStepwise-v0')
 
     print("Episode using real control with Stepwise Wind")
-    observation, _, done, _ = wt.reset()
+    done = False
+    observation = wt.reset()
     while not done:
         action = wt.env.real_control(observation)
         observation, reward, done, info = wt.step(action)
@@ -57,7 +60,8 @@ def run_neutral_actions_with_animation():
     wt.env.activate_render_animation()
     wt.render()
 
-    observation, _, done, _ = wt.reset()
+    done = False
+    wt.reset()
     action = wt.env.neutral_action
     while not done:
         observation, reward, done, info = wt.step(action)

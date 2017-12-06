@@ -17,7 +17,7 @@ setup(
         'console_scripts': [
             'gwt-run-neutral=gym_wind_turbine.envs.wind_turbine_run:run_neutral_actions',
             'gwt-run-random=gym_wind_turbine.envs.wind_turbine_run:run_random_actions',
-            'gwt-run-real-control=gym_wind_turbine.envs.wind_turbine_run:run_real_control_actions'
+            'gwt-run-real-control=gym_wind_turbine.envs.wind_turbine_run:run_real_control_actions',
             'gwt-run-neutral-animation=gym_wind_turbine.envs.wind_turbine_run:run_neutral_actions_with_animation',
         ]
     }
