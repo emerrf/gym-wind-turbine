@@ -118,6 +118,7 @@ class WindTurbine(gym.Env):
 
         # Render
         self.render_animation = False
+        plt.ioff()
         self.run_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
         # render_animation
         self.plotter_data = mp.Queue()
@@ -151,6 +152,7 @@ class WindTurbine(gym.Env):
              23.469])
 
     def activate_render_animation(self):
+        plt.ion()
         self.render_animation = True
 
     def _initialise_nrel_5mw(self):
@@ -310,7 +312,8 @@ class WindTurbine(gym.Env):
             self.y_pitch = np.full(self.x_t.shape, np.nan)
             self.y_reward = np.full(self.x_t.shape, np.nan)
 
-        return self._step(self.neutral_action)
+        # return observation only
+        return self._step(self.neutral_action)[0]
 
     def _render(self, mode='human', close=False):
 
@@ -390,6 +393,7 @@ class WindTurbine(gym.Env):
 
             logger.info("Saving figure: {}".format(rout_path))
             plt.savefig(rout_path, dpi=72)
+            plt.close(fig)
             # plt.show()
 
         if mode == 'human':
