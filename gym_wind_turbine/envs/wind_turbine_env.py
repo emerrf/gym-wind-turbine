@@ -232,7 +232,8 @@ class WindTurbine(gym.Env):
 
     def _score(self, obs, power_coeff=0.8, thrust_coeff=0.2):
         (_, P, T, _, _, _) = obs
-        return power_coeff * P - thrust_coeff * T
+        Pmax, Tmax = self.observation_space.high[1:3]
+        return power_coeff * (P/Pmax) - thrust_coeff * (T/Tmax)
 
     def _step(self, action):
         # Take action
