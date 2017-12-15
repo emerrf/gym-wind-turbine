@@ -341,8 +341,9 @@ class WindTurbine(gym.Env):
                   ax_T,
                   ax_omega,
                   ax_gen_torq,
-                  ax_pitch) = plt.subplots(6, figsize=(8, 12), sharex='all',
-                                           tight_layout=True)
+                  ax_pitch,
+                  ax_reward) = plt.subplots(7, figsize=(8, 12), sharex='all',
+                                            tight_layout=True)
 
             fig.suptitle('gym-wind-turbine')
 
@@ -389,12 +390,12 @@ class WindTurbine(gym.Env):
             ax_pitch.grid(linestyle='--', linewidth=0.5)
             ax_pitch.set_xlabel('Time [s]')
 
-            # ax_reward.set_ylabel('Total Reward [units]')
-            # line_reward = Line2D([], [], color='blue')  # 00529F, red: #A2214B
-            # ax_reward.add_line(line_reward)
-            # ax_reward.set_xlim(0, initial_xmax)
-            # ax_reward.set_ylim(-200, 5600)
-            # ax_reward.grid(linestyle='--', linewidth=0.5)
+            ax_reward.set_ylabel('Reward [units]')
+            line_reward = Line2D(self.x_t, self.y_reward, color='green')
+            ax_reward.add_line(line_reward)
+            ax_reward.set_xlim(0, self.t_max)
+            ax_reward.set_ylim(-0.2, 0.8)
+            ax_reward.grid(linestyle='--', linewidth=0.5)
 
             logger.info("Saving figure: {}".format(rout_path))
             plt.savefig(rout_path, dpi=72)
