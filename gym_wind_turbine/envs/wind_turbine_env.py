@@ -228,7 +228,7 @@ class WindTurbine(gym.Env):
         i_gen = drivetrain_param['generator_inertia']
 
         alpha = (t_aero - n_gear * t_gen) / (i_rotor + n_gear ** 2 * i_gen)
-        return (alpha * 30/np.pi) * self.dt
+        return alpha * self.dt * 30/np.pi
 
     def _score(self, obs, power_coeff=0.8, thrust_coeff=0.2):
         (_, P, T, _, _, _) = obs
@@ -244,8 +244,12 @@ class WindTurbine(gym.Env):
         # Simulate
         self.omega = self.next_omega
         Uinf = self.anamometer.read(self.t)
-        P, T, Q = self.rotor.evaluate([Uinf], [self.omega], [self.pitch])
-        observation = np.array([Uinf, P[0] / 1e3, T[0] / 1e3, self.omega,
+        P_aero, T, Q = self.rotor.evaluate([Uinf], [self.omega], [self.pitch])
+        P_gen = (self.omega
+                 * self.gen_torq
+                 * self.nrel_5mw_drivetrain_param['gear_box_ratio']
+                 * np.pi / 30)
+        observation = np.array([Uinf, P_gen, T[0] / 1e3, self.omega,
                                 self.gen_torq, self.pitch])
 
         # Compute reward
