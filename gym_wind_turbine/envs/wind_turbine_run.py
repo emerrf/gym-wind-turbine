@@ -23,6 +23,23 @@ def run_neutral_actions():
     wt.render()
 
 
+def run_real_control_test():
+
+    wt = gym.make('WindTurbine-v0')
+
+    print("Episode using real control with constant Wind")
+    done = False
+    observation = wt.reset()
+    accreward = 0
+    while not done:
+        action = wt.env.real_control(observation)
+        observation, reward, done, info = wt.step(action)
+        accreward += reward
+
+    print("Accumulated reward: {}".format(accreward))
+    wt.render()
+
+
 def run_random_actions():
 
     wt = gym.make('WindTurbine-v0')
@@ -74,4 +91,5 @@ if __name__ == '__main__':
     run_random_actions()
     run_real_control_actions()
     run_neutral_actions_with_animation()
+    # run_real_control_test()
 
