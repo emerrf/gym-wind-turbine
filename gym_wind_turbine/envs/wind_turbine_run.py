@@ -87,9 +87,9 @@ def run_neutral_actions_with_animation():
 
 
 if __name__ == '__main__':
-    run_neutral_actions()
+    # run_neutral_actions()
     run_random_actions()
-    run_real_control_actions()
-    run_neutral_actions_with_animation()
-    # run_real_control_test()
+    # run_real_control_actions()
+    # run_neutral_actions_with_animation()
+    run_real_control_test()
 

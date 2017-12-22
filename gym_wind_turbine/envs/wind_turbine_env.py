@@ -114,7 +114,7 @@ class WindTurbine(gym.Env):
         self.pitch = 0.0
         self.omega = 6.8464
         self.next_omega = self.omega
-        self.accum_reward = 0.0  # Accumulated reward
+        self.prev_reward = None
 
         # Render
         self.render_animation = False
@@ -230,10 +230,22 @@ class WindTurbine(gym.Env):
         alpha = (t_aero - n_gear * t_gen) / (i_rotor + n_gear ** 2 * i_gen)
         return alpha * self.dt * 30/np.pi
 
-    def _score(self, obs, power_coeff=0.8, thrust_coeff=0.2):
+    # def _score(self, obs, power_coeff=0.8, thrust_coeff=0.2):
+    #     (_, P, T, _, _, _) = obs
+    #     # Pmax, Tmax = self.observation_space.high[1:3]
+    #     #return power_coeff * (P/Pmax) - thrust_coeff * (T/Tmax)
+    #     return power_coeff * P - thrust_coeff * T
+
+    def _score(self, obs, prev_obs, act, power_coeff=0.8, thrust_coeff=0.2,
+               ctrl_cost_coeff=0.0001):
         (_, P, T, _, _, _) = obs
-        Pmax, Tmax = self.observation_space.high[1:3]
-        return power_coeff * (P/Pmax) - thrust_coeff * (T/Tmax)
+        (_, prev_P, prev_T, _, _, _) = prev_obs
+        rew_power = power_coeff * (P - prev_P)/prev_P
+        rew_thrust = thrust_coeff * (T - prev_T)/prev_T
+        rew_control = ctrl_cost_coeff * np.square(act).sum()
+        # reward = rew_power - rew_thrust - rew_control
+        reward = rew_power - rew_thrust
+        return reward, rew_control
 
     def _step(self, action):
         # Take action
@@ -254,8 +266,16 @@ class WindTurbine(gym.Env):
                                 self.gen_torq, self.pitch])
 
         # Compute reward
-        reward = self._score(observation)
-        self.accum_reward += reward
+        if self.prev_reward is None:
+            reward, rew_ctrl = 0.0, 0.0
+        else:
+            reward, rew_ctrl = self._score(observation, self.prev_observation,
+                                           action)
+
+        self.prev_observation = observation
+        self.prev_reward = reward
+        # logger.info("Reward: {}\t Reward_control: {} = {}".format(
+        #     reward, rew_ctrl, reward-rew_ctrl))
 
         # End the episode if actions or observations are out boundaries
         done = not (self.action_space.contains(action)
@@ -318,6 +338,7 @@ class WindTurbine(gym.Env):
             self.y_reward = np.full(self.x_t.shape, np.nan)
 
         # return observation only
+        self.prev_reward = None
         return self._step(self.neutral_action)[0]
 
     def _render(self, mode='human', close=False):
@@ -388,18 +409,19 @@ class WindTurbine(gym.Env):
             ax_pitch.set_xlim(0, self.t_max)
             ax_pitch.set_ylim(0, 90)
             ax_pitch.grid(linestyle='--', linewidth=0.5)
-            ax_pitch.set_xlabel('Time [s]')
 
             ax_reward.set_ylabel('Reward [units]')
             line_reward = Line2D(self.x_t, self.y_reward, color='green')
             ax_reward.add_line(line_reward)
             ax_reward.set_xlim(0, self.t_max)
-            ax_reward.set_ylim(-0.2, 0.8)
+            #ax_reward.set_ylim(-200, 5600)
+            ax_reward.set_ylim(-1, 1)
             ax_reward.grid(linestyle='--', linewidth=0.5)
+            ax_reward.set_xlabel('Time [s]')
 
             logger.info("Saving figure: {}".format(rout_path))
             plt.savefig(rout_path, dpi=72)
-            plt.close(fig)
+            # plt.close(fig)
             # plt.show()
 
         if mode == 'human':
