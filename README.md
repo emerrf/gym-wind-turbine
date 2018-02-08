@@ -76,6 +76,12 @@ For exploring inside the image:
 docker run -it --entrypoint /bin/bash  gym-wind-turbine:1.0.0
 ```
 
+### Docker notes
+```
+docker build -t gym-wind-turbine:latest .
+docker run -v C:\Users\emerrf\Documents\GitHub\remote\gym-wind-turbine\docker_gwt_output:/app/gym-wind-turbine/gwt_output gym-wind-turbine:latest 
+```
+
 ### Run samples
 The `gym_wind_turbine/envs/wind_turbine_run.py` file contains sample code of how to use the environment. There are several cases and each one has a command line entry point associated.  
 
