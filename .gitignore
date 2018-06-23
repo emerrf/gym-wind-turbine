@@ -1,6 +1,7 @@
 ## gym-wind-turbine
 # Render output
-gwt_render_output_*/
+gwt_output/
+docker_gwt_output/
 
 # PyCharm
 .idea/

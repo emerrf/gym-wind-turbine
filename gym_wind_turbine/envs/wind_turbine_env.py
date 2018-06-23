@@ -6,6 +6,8 @@ import numpy as np
 from pkg_resources import resource_filename
 from os import path, makedirs
 
+import matplotlib
+matplotlib.use('Agg')
 import matplotlib.pyplot as plt
 from matplotlib.lines import Line2D
 from matplotlib.animation import FuncAnimation
@@ -114,12 +116,16 @@ class WindTurbine(gym.Env):
         self.pitch = 0.0
         self.omega = 6.8464
         self.next_omega = self.omega
-        self.accum_reward = 0.0  # Accumulated reward
+
+        # Reward and score
+        self.accum_energy = 0.0
+        self.prev_reward = None
+        self.game_over = False
 
         # Render
         self.render_animation = False
         plt.ioff()
-        self.run_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        self.run_timestamp = self._get_timestamp()
         # render_animation
         self.plotter_data = mp.Queue()
         self.is_plotter_active = False
@@ -150,6 +156,9 @@ class WindTurbine(gym.Env):
             [0, 0, 0, 0, 0, 0, 0, 0, 0, 3.823, 6.602, 8.668, 10.45, 12.055,
              13.536, 14.92, 16.226, 17.473, 18.699, 19.941, 21.177, 22.347,
              23.469])
+
+    def _get_timestamp(self):
+        return datetime.now().strftime('%Y%m%d%H%M%S')
 
     def activate_render_animation(self):
         plt.ion()
@@ -230,11 +239,6 @@ class WindTurbine(gym.Env):
         alpha = (t_aero - n_gear * t_gen) / (i_rotor + n_gear ** 2 * i_gen)
         return alpha * self.dt * 30/np.pi
 
-    def _score(self, obs, power_coeff=0.8, thrust_coeff=0.2):
-        (_, P, T, _, _, _) = obs
-        Pmax, Tmax = self.observation_space.high[1:3]
-        return power_coeff * (P/Pmax) - thrust_coeff * (T/Tmax)
-
     def _step(self, action):
         # Take action
         if self.action_space.contains(action):
@@ -253,13 +257,52 @@ class WindTurbine(gym.Env):
         observation = np.array([Uinf, P_gen, T[0] / 1e3, self.omega,
                                 self.gen_torq, self.pitch])
 
-        # Compute reward
-        reward = self._score(observation)
-        self.accum_reward += reward
-
         # End the episode if actions or observations are out boundaries
-        done = not (self.action_space.contains(action)
-                    and self.observation_space.contains(observation))
+        self.game_over = not (self.action_space.contains(action)
+            and self.observation_space.contains(observation))
+
+        # Compute reward
+        if self.prev_reward is None:
+            reward, rew_ctrl = 0.0, 0.0
+        else:
+            P_weight = 1.0
+            T_weight = 0.0
+            ctrl_weight = 0.1
+
+            (_, P, T, _, _, _) = observation
+            (_, prev_P, prev_T, _, _, _) = self.prev_observation
+            
+            energy = P * (self.dt/3600.0)
+            self.accum_energy += energy
+
+            P_chg_rate = (P - prev_P)/prev_P
+            T_chg_rate = (T - prev_T)/prev_T
+            ctrl_chg = np.square(action).sum()
+
+            rew_power = P_weight * P_chg_rate
+            rew_thrust = T_weight * T_chg_rate
+            rew_control = ctrl_weight * ctrl_chg
+            rew_alive = 0.05
+            
+            reward = rew_power - rew_thrust - rew_control + rew_alive
+            # print("{} = {} - {} - {} + {}".format(
+            #     reward, rew_power, rew_thrust, rew_control, rew_alive))
+            # print("{} = {}/{}".format(
+            #     P_chg_rate/ctrl_chg, P_chg_rate, ctrl_chg))
+
+        done = False
+        if self.game_over:
+            # Failure before end of simulation
+            # print("Game Over", self.accum_energy, reward)
+            reward -= self.accum_energy
+            done = True
+        elif self.i == self.i_max:
+            # End of simulation with no failure
+            # print("End of simulation", self.accum_energy, reward)
+            reward += self.accum_energy
+
+        self.prev_observation = observation
+        self.prev_reward = reward
 
         # Render data points
         if self.render_animation:
@@ -318,14 +361,18 @@ class WindTurbine(gym.Env):
             self.y_reward = np.full(self.x_t.shape, np.nan)
 
         # return observation only
+        self.accum_energy = 0.0
+        self.prev_reward = None
+        self.game_over = False
         return self._step(self.neutral_action)[0]
 
     def _render(self, mode='human', close=False):
 
         def plot_and_save():
-            rout_dir = 'gwt_render_output_{}'.format(self.run_timestamp)
+            rout_dir = path.join('gwt_output',
+                                 'render_{}'.format(self.run_timestamp))
             rout_filename = 'ep_{}_{}.png'.format(
-                "%05d" % self.ep, '%0.0f' % (time.time() * 100))
+                "%05d" % self.ep, self._get_timestamp())
             rout_path = path.join(rout_dir, rout_filename)
 
             # Create render output directory
@@ -388,18 +435,19 @@ class WindTurbine(gym.Env):
             ax_pitch.set_xlim(0, self.t_max)
             ax_pitch.set_ylim(0, 90)
             ax_pitch.grid(linestyle='--', linewidth=0.5)
-            ax_pitch.set_xlabel('Time [s]')
 
             ax_reward.set_ylabel('Reward [units]')
             line_reward = Line2D(self.x_t, self.y_reward, color='green')
             ax_reward.add_line(line_reward)
             ax_reward.set_xlim(0, self.t_max)
-            ax_reward.set_ylim(-0.2, 0.8)
+            #ax_reward.set_ylim(-200, 5600)
+            ax_reward.set_ylim(-1, 1)
             ax_reward.grid(linestyle='--', linewidth=0.5)
+            ax_reward.set_xlabel('Time [s]')
 
             logger.info("Saving figure: {}".format(rout_path))
             plt.savefig(rout_path, dpi=72)
-            plt.close(fig)
+            # plt.close(fig)
             # plt.show()
 
         if mode == 'human':

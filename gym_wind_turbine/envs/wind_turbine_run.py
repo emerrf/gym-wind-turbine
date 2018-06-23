@@ -30,13 +30,22 @@ def run_real_control_test():
     print("Episode using real control with constant Wind")
     done = False
     observation = wt.reset()
-    accreward = 0
+    acc_reward = 0.0
+    energy = 0.0
+    thrust_area = 0.0
+    step_size = wt.env.dt/3600.0
+
     while not done:
         action = wt.env.real_control(observation)
         observation, reward, done, info = wt.step(action)
-        accreward += reward
+        acc_reward += reward
+        _, P, T, _, _, _ = observation
+        energy += P * step_size
+        thrust_area += T * step_size
 
-    print("Accumulated reward: {}".format(accreward))
+    print("Reward: {}\nEnergy: {}\nThrust Area: {}".format(
+        acc_reward, energy, thrust_area))
+
     wt.render()
 
 
@@ -87,9 +96,9 @@ def run_neutral_actions_with_animation():
 
 
 if __name__ == '__main__':
-    run_neutral_actions()
-    run_random_actions()
-    run_real_control_actions()
-    run_neutral_actions_with_animation()
-    # run_real_control_test()
+    # run_neutral_actions()
+    # run_random_actions()
+    # run_real_control_actions()
+    # run_neutral_actions_with_animation()
+    run_real_control_test()
 

@@ -1,0 +1,10 @@
+# Render output
+gwt_output/
+docker_gwt_output/
+
+# PyCharm
+.idea/
+gwt-devenv/
+ani.mp4
+
+*.egg-info/

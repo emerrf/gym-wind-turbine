@@ -29,10 +29,12 @@ For those unfamiliar with OpenAI Gym environments, there is excellent [documenta
 ### Installation
 The package has been coded and tested on GNU/Linux and Windows environments with Python 2.7 and 3.6.
 
-#### Ubuntu
+#### Ubuntu 16.04.3
 It requires Python 2.7 or 3.6 and the Fortran compiler for the CCBlade routines.
 ```
+$ sudo apt install python-pip python-dev python-virtualenv python-tk gfortran
 $ virtualenv gwt-devenv
+$ source gwt-devenv/bin/activate
 (gwt-devenv)$ pip install numpy==1.12.1
 (gwt-devenv)$ pip install -r requirements.txt
 ```
@@ -74,6 +76,12 @@ docker run gym-wind-turbine:1.0.0
 For exploring inside the image:
 ```bash
 docker run -it --entrypoint /bin/bash  gym-wind-turbine:1.0.0
+```
+
+### Docker notes
+```
+docker build -t gym-wind-turbine:latest .
+docker run -v C:\Users\emerrf\Documents\GitHub\remote\gym-wind-turbine\docker_gwt_output:/app/gym-wind-turbine/gwt_output gym-wind-turbine:latest 
 ```
 
 ### Run samples
